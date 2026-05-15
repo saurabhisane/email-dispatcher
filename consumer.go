@@ -15,9 +15,6 @@ func emailWorker(id int, ch chan Recipient, wg *sync.WaitGroup) {
 		smtpHost := "localhost"
 		smtpPort := "1025"
 
-		// formattedMsg := fmt.Sprintf("To: %s\r\nSubject: Test Email\r\n\n%s\r\n", recipient.Email, "Just testing our email campaign")
-		// msg := []byte(formattedMsg)
-
 		msg, err := executeTemplate(recipient)
 		if err != nil {
 			log.Printf("Worker %d: Error executing template for %s: %v\n", id, recipient.Email, err)

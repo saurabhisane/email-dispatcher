@@ -1,9 +1,12 @@
 package main
 
 import (
-	"html/template"
-	"sync"
 	"bytes"
+	"context"
+	"flag"
+	"html/template"
+	"log"
+	"sync"
 )
 
 type Recipient struct {
@@ -13,18 +16,39 @@ type Recipient struct {
 
 func main() {
 
+	mongoURI := flag.String("mongoURI", "mongodb://localhost:27017", "MongoDB URI")
+	dbName := flag.String("dbName", "email_dispatcher", "Email-dispatcher database name")
+	workerCount := flag.Int("workerCount", 5, "Number of email worker goroutines")
+	flag.Parse()
+
+	client, err := openDB(*mongoURI)
+	if err != nil {
+		log.Fatalf("Failed to connect to mongoDB: %v", err)
+	}
+
+	defer func() {
+		if err = client.Disconnect(context.Background()); err != nil {
+			log.Fatalf("Failed to disconnect from mongoDB: %v", err)
+		}
+	}()
+
+	db := client.Database(*dbName)
+
+	if err := ensureContactIndex(db); err != nil {
+		log.Fatalf("Failed to create index on contacts collection: %v", err)
+	}
+
 	recipientChannel := make(chan Recipient)
 
 	go func() {
-
-		loadRecipients("./name_emails_200_records.csv", recipientChannel)
-
+		if err := loadRecipientsFromDB(db, recipientChannel); err != nil{
+			log.Fatalf("Failed to load recipients from database: %v", err)
+		}
 	}()
 
 	var wg sync.WaitGroup
-	workerCount := 5
 
-	for i := 1; i <= workerCount; i++ {
+	for i := 1; i <= *workerCount; i++ {
 		wg.Add(1)
 		go emailWorker(i, recipientChannel, &wg)
 	}
